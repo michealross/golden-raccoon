@@ -13,6 +13,7 @@ type SocialAgentInput = {
   discordUrl?: string;
   dexScreenerPairUrl?: string;
   coingeckoId?: string;
+  discovery?: import("@/server/types").DiscoveryAgentContext;
 };
 
 type SocialMetadata = {

@@ -20,6 +20,7 @@ export const agentRecommendedActionSchema = z.enum([
   "avoid",
   "manual_review",
   "prepare_transaction",
+  "create_trustline",
   "no_action",
 ]);
 
@@ -49,12 +50,12 @@ export const agentFindingSchema = z.object({
   label: z.string().min(1),
   severity: riskLevelSchema,
   detail: z.string().min(1),
-  scoreImpact: z.number().min(0).max(100),
-  weight: z.number(),
-  sourceLabel: z.string().min(1),
+  scoreImpact: z.number().min(0).max(100).optional(),
+  weight: z.number().optional(),
+  sourceLabel: z.string().min(1).optional(),
   raw: z.string().optional(),
-  interpretation: z.string().min(1),
-  confidence: z.number().min(0).max(1),
+  interpretation: z.string().min(1).optional(),
+  confidence: z.number().min(0).max(1).optional(),
 });
 
 export const agentMissingDataSchema = z.object({

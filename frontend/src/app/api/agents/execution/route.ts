@@ -47,5 +47,7 @@ export async function POST(request: Request) {
 
   const rules = getUserRuleRecord(parsed.data.walletAddress);
 
-  return withCacheHeaders(NextResponse.json(runExecutionAgent({ ...parsed.data, rules })), "execution");
+  const result = await runExecutionAgent({ ...parsed.data, rules });
+
+  return withCacheHeaders(NextResponse.json(result), "execution");
 }

@@ -1,5 +1,14 @@
 import type { AgentRecommendedAction, UserRule } from "@/server/types";
 import { getDefaultRules } from "@/server/rules/defaultRules";
+import { getChainFamily } from "@/lib/chainIdentity";
+
+export type StellarPolicyOverrides = {
+  allowedIssuers?: string[];
+  blockClawbackIssuers: boolean;
+  blockRevocableIssuers: boolean;
+  maxTrustlineReserveXlm: number;
+  minXlmReserve: number;
+};
 
 export type ExecutionPolicy = {
   autoExecute: false;
@@ -12,6 +21,7 @@ export type ExecutionPolicy = {
   blockedTokens: string[];
   allowedActions: Set<AgentRecommendedAction>;
   walletAddress: string;
+  stellar: StellarPolicyOverrides;
 };
 
 export type ExecutionPolicyInput = {
@@ -24,10 +34,27 @@ export type ExecutionPolicyInput = {
   estimatedValueUsd?: number;
   slippageBps?: number;
   simulationStatus?: "not_required" | "pending" | "passed" | "failed" | "unavailable";
+  // Stellar-specific trustline fields
+  stellarIssuer?: string;
+  stellarIssuerClawback?: boolean;
+  stellarIssuerRevocable?: boolean;
+  stellarReserveRequiredXlm?: number;
+  stellarCurrentXlmBalance?: number;
+  stellarQuoteStatus?: "fresh" | "stale" | "unavailable" | "simulated";
 };
 
 function uniqueStrings(values: string[] | undefined, fallback: string[]) {
   return Array.from(new Set((values?.length ? values : fallback).map((value) => value.trim()).filter(Boolean)));
+}
+
+function getDefaultStellarPolicy(): StellarPolicyOverrides {
+  return {
+    allowedIssuers: undefined,
+    blockClawbackIssuers: true,
+    blockRevocableIssuers: true,
+    maxTrustlineReserveXlm: 5,
+    minXlmReserve: 1.5,
+  };
 }
 
 export function buildExecutionPolicy(rules?: UserRule): ExecutionPolicy {
@@ -43,13 +70,18 @@ export function buildExecutionPolicy(rules?: UserRule): ExecutionPolicy {
     maxSlippageBps: safeRules.maxSlippageBps ?? defaultRules.maxSlippageBps ?? 100,
     allowedChains: uniqueStrings(safeRules.allowedChains, defaultRules.allowedChains ?? ["GOAT Network"]),
     blockedTokens: uniqueStrings(safeRules.blockedTokens, []),
-    allowedActions: new Set(safeRules.allowedActions ?? defaultRules.allowedActions ?? ["reduce_exposure", "swap_to_stable", "prepare_transaction", "watch", "hold", "no_action"]),
+    allowedActions: new Set(safeRules.allowedActions ?? defaultRules.allowedActions ?? ["reduce_exposure", "swap_to_stable", "prepare_transaction", "create_trustline", "watch", "hold", "no_action"]),
     walletAddress: safeRules.walletAddress,
+    stellar: getDefaultStellarPolicy(),
   };
 }
 
 function normalized(value?: string) {
   return value?.trim().toLowerCase();
+}
+
+function isStellarChain(chain?: string) {
+  return getChainFamily(chain) === "stellar";
 }
 
 export function evaluateExecutionPolicy(input: ExecutionPolicyInput, policy: ExecutionPolicy) {
@@ -97,6 +129,59 @@ export function evaluateExecutionPolicy(input: ExecutionPolicyInput, policy: Exe
 
   if (input.simulationStatus === "failed") {
     violations.push("Simulation failed. Confirmation is blocked until the issue is resolved.");
+  }
+
+  // Stellar-specific policy checks
+  if (isStellarChain(input.network)) {
+    // Trustline creation is only allowed for Stellar chains
+    if (input.action === "create_trustline") {
+      if (typeof input.stellarIssuer === "string") {
+        const allowedIssuers = policy.stellar.allowedIssuers;
+
+        if (allowedIssuers && allowedIssuers.length > 0) {
+          const normalizedIssuer = input.stellarIssuer.trim().toUpperCase();
+
+          if (!allowedIssuers.map((i) => i.trim().toUpperCase()).includes(normalizedIssuer)) {
+            violations.push(`Issuer ${input.stellarIssuer} is not in the allowed issuer list.`);
+          }
+        }
+
+        if (input.stellarIssuerClawback === true && policy.stellar.blockClawbackIssuers) {
+          violations.push(`Issuer ${input.stellarIssuer} has clawback enabled, which is blocked by policy.`);
+        }
+
+        if (input.stellarIssuerRevocable === true && policy.stellar.blockRevocableIssuers) {
+          violations.push(`Issuer ${input.stellarIssuer} has revocable authorization, which is blocked by policy.`);
+        }
+      }
+
+      if (typeof input.stellarReserveRequiredXlm === "number") {
+        if (input.stellarReserveRequiredXlm > policy.stellar.maxTrustlineReserveXlm) {
+          violations.push(`Trustline reserve ${input.stellarReserveRequiredXlm} XLM exceeds max trustline reserve ${policy.stellar.maxTrustlineReserveXlm} XLM.`);
+        }
+
+        if (typeof input.stellarCurrentXlmBalance === "number") {
+          const availableXlm = input.stellarCurrentXlmBalance - input.stellarReserveRequiredXlm;
+
+          if (availableXlm < policy.stellar.minXlmReserve) {
+            violations.push(`Insufficient XLM reserve: ${availableXlm.toFixed(2)} XLM available after trustline, needs at least ${policy.stellar.minXlmReserve} XLM.`);
+          }
+        }
+      }
+    }
+
+    // For Stellar swaps, require a fresh quote
+    if (input.action === "swap_to_stable" || input.action === "reduce_exposure" || input.action === "prepare_transaction") {
+      if (input.stellarQuoteStatus === "unavailable") {
+        violations.push("Stellar swap requires a fresh quote before execution preparation.");
+      }
+
+      if (input.stellarQuoteStatus === "stale") {
+        violations.push("The Stellar swap quote is stale. A fresh quote must be obtained.");
+      }
+    }
+  } else if (input.action === "create_trustline") {
+    violations.push("Trustline creation is only supported on Stellar networks.");
   }
 
   return {

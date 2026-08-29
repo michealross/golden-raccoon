@@ -8,6 +8,7 @@ type NewsAgentInput = {
   projectName?: string;
   websiteUrl?: string;
   chain?: string;
+  discovery?: import("@/server/types").DiscoveryAgentContext;
 };
 
 type NewsSourceTier = 1 | 2 | 3 | 4;
@@ -56,7 +57,7 @@ type IdentityTerm = {
   strength: "weak" | "medium" | "high";
 };
 
-type NewsAgentProviders = {
+export type NewsAgentProviders = {
   feeds?: NewsFeed[];
   fetchFeed?: (feed: NewsFeed) => Promise<NewsItem[]>;
   now?: Date;

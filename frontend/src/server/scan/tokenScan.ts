@@ -395,7 +395,7 @@ export async function runTokenScan(query: string, chain?: string, walletAddress?
     },
   });
   const overallRiskScore = decisionResult.score;
-  const executionPreview = buildExecutionPreview({
+  const executionPreview = await buildExecutionPreview({
     action: decisionResult.recommendedAction,
     fromToken: normalized.symbol ?? "TOKEN",
     toToken: "USDC",

@@ -1,4 +1,4 @@
-import type { AgentInputIdentity, PortfolioSnapshot, TokenHolding, TokenSignal } from "@/server/types";
+import type { AgentInputIdentity, PortfolioSnapshot, StellarTrustlinePreview, TokenHolding, TokenSignal } from "@/server/types";
 import { getRiskLevel, scorePortfolioRisk, scoreTokenRisk } from "@/server/portfolio/riskScoring";
 
 function signals(overrides: Partial<TokenSignal> = {}): TokenSignal {
@@ -25,6 +25,163 @@ function holding(input: Omit<TokenHolding, "riskScore" | "riskLevel">): TokenHol
     riskLevel: getRiskLevel(riskScore),
   };
 }
+
+// Stellar-specific fixture helpers
+export type StellarTrustlineFixture = {
+  assetCode: string;
+  issuer: string;
+  chain: string;
+  walletAddress: string;
+  expectedCanCreate: boolean;
+  expectedBlockedReason?: StellarTrustlinePreview["blockedReason"];
+  issuerFlags: {
+    authRequired: boolean;
+    authRevocable: boolean;
+    authClawbackEnabled: boolean;
+    authImmutable: boolean;
+  };
+  xlmBalance: number;
+  subentryCount: number;
+  expectedReserveRequiredXlm: number;
+  expectedSufficientReserve: boolean;
+};
+
+export type StellarSwapFixture = {
+  chain: string;
+  walletAddress: string;
+  fromAsset: string;
+  toAsset: string;
+  fromIssuer?: string;
+  toIssuer?: string;
+  amount: number;
+  slippageBps: number;
+  expectedQuoteSuccess: boolean;
+  expectedRouteType?: "classic_path_payment" | "soroban_swap" | "mixed";
+};
+
+export const stellarTrustlineFixtures: Record<string, StellarTrustlineFixture> = {
+  // Safe trustline - test USDC on testnet with safe issuer
+  safeUsdcTestnet: {
+    assetCode: "USDC",
+    issuer: "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
+    chain: "stellar-testnet",
+    walletAddress: "GAH4OKQGUST2QO4AZYBEZNRAGNKYCDMII6RONIRNT77CQ5OAYZAQ3QDQ",
+    expectedCanCreate: true,
+    issuerFlags: {
+      authRequired: false,
+      authRevocable: false,
+      authClawbackEnabled: false,
+      authImmutable: false,
+    },
+    xlmBalance: 50,
+    subentryCount: 0,
+    expectedReserveRequiredXlm: 0.5,
+    expectedSufficientReserve: true,
+  },
+  // Clawback issuer - should be blocked
+  clawbackIssuer: {
+    assetCode: "CLAWBACK",
+    issuer: "GDX4EONGQK7W5FY3W5Y6KZXTLJUV3VXOYG5ZYVBQK7Z5OZOBY5J3T4Z6",
+    chain: "stellar-testnet",
+    walletAddress: "GAH4OKQGUST2QO4AZYBEZNRAGNKYCDMII6RONIRNT77CQ5OAYZAQ3QDQ",
+    expectedCanCreate: false,
+    expectedBlockedReason: "clawback_enabled",
+    issuerFlags: {
+      authRequired: false,
+      authRevocable: true,
+      authClawbackEnabled: true,
+      authImmutable: false,
+    },
+    xlmBalance: 10,
+    subentryCount: 3,
+    expectedReserveRequiredXlm: 2.0,
+    expectedSufficientReserve: false,
+  },
+  // Insufficient reserve - should be blocked
+  insufficientReserve: {
+    assetCode: "RESERVE",
+    issuer: "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
+    chain: "stellar-testnet",
+    walletAddress: "GAH4OKQGUST2QO4AZYBEZNRAGNKYCDMII6RONIRNT77CQ5OAYZAQ3QDQ",
+    expectedCanCreate: false,
+    expectedBlockedReason: "insufficient_reserve",
+    issuerFlags: {
+      authRequired: false,
+      authRevocable: false,
+      authClawbackEnabled: false,
+      authImmutable: false,
+    },
+    xlmBalance: 1.0,
+    subentryCount: 0,
+    expectedReserveRequiredXlm: 0.5,
+    expectedSufficientReserve: false,
+  },
+  // Wrong network - should be blocked
+  wrongNetwork: {
+    assetCode: "XLMTEST",
+    issuer: "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
+    chain: "ethereum",
+    walletAddress: "GAH4OKQGUST2QO4AZYBEZNRAGNKYCDMII6RONIRNT77CQ5OAYZAQ3QDQ",
+    expectedCanCreate: false,
+    expectedBlockedReason: "network_mismatch",
+    issuerFlags: {
+      authRequired: false,
+      authRevocable: false,
+      authClawbackEnabled: false,
+      authImmutable: false,
+    },
+    xlmBalance: 0,
+    subentryCount: 0,
+    expectedReserveRequiredXlm: 0.5,
+    expectedSufficientReserve: false,
+  },
+};
+
+export const stellarSwapFixtures: Record<string, StellarSwapFixture> = {
+  // Successful classic path payment swap on testnet
+  xlmToUsdcTestnet: {
+    chain: "stellar-testnet",
+    walletAddress: "GAH4OKQGUST2QO4AZYBEZNRAGNKYCDMII6RONIRNT77CQ5OAYZAQ3QDQ",
+    fromAsset: "native",
+    toAsset: "USDC",
+    toIssuer: "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
+    amount: 100,
+    slippageBps: 100,
+    expectedQuoteSuccess: true,
+    expectedRouteType: "classic_path_payment",
+  },
+  // Failed swap - unknown asset
+  unknownAssetSwap: {
+    chain: "stellar-testnet",
+    walletAddress: "GAH4OKQGUST2QO4AZYBEZNRAGNKYCDMII6RONIRNT77CQ5OAYZAQ3QDQ",
+    fromAsset: "UNKNOWN",
+    toAsset: "XLM",
+    amount: 10,
+    slippageBps: 100,
+    expectedQuoteSuccess: false,
+  },
+  // XLM to XLM - should fail
+  xlmToXlm: {
+    chain: "stellar-testnet",
+    walletAddress: "GAH4OKQGUST2QO4AZYBEZNRAGNKYCDMII6RONIRNT77CQ5OAYZAQ3QDQ",
+    fromAsset: "native",
+    toAsset: "XLM",
+    amount: 100,
+    slippageBps: 100,
+    expectedQuoteSuccess: false,
+  },
+  // Invalid wallet address - should fail
+  invalidWallet: {
+    chain: "stellar-testnet",
+    walletAddress: "0x1234",
+    fromAsset: "XLM",
+    toAsset: "USDC",
+    toIssuer: "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
+    amount: 100,
+    slippageBps: 100,
+    expectedQuoteSuccess: false,
+  },
+};
 
 export const tokenIdentityFixtures: Record<string, AgentInputIdentity> = {
   safeBlueChipToken: {

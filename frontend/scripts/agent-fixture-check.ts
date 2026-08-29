@@ -29,6 +29,7 @@ import { getX402RouteConfig, getX402RuntimeConfig, validateX402RuntimeConfig } f
 import { assertFreshX402Payment, hashPaymentHeader } from "../src/server/x402/guards";
 import type { AgentResult, PortfolioSnapshot, TokenHolding } from "../src/server/types";
 import { POST as confirmExecution } from "../src/app/api/execute/confirm/route";
+import { runDiscoveryFixtures } from "../src/server/discovery/fixtures";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
@@ -661,7 +662,7 @@ async function runDecisionChecks() {
     results: [
       {
         ...blueChipLikeResult(),
-        findings: [{ label: "Invalid finding", severity: "low", detail: "Missing normalized contract fields." }],
+        findings: [{ severity: "low", detail: "Missing normalized contract fields and required label." } as unknown as { label: string; severity: "low" | "medium" | "high" | "critical"; detail: string }],
       } as AgentResult,
     ],
   });
@@ -1224,6 +1225,7 @@ function runX402Checks() {
 }
 
 async function main() {
+  await runDiscoveryFixtures();
   await runOnchainChecks();
   await runNewsChecks();
   await runSocialChecks();
@@ -1233,6 +1235,15 @@ async function main() {
   await runProviderReliabilityChecks();
   runCachePolicyChecks();
   runX402Checks();
+
+  const discoveryFixtureResults = await runDiscoveryFixtures();
+  for (const fixture of discoveryFixtureResults) {
+    if (!fixture.passed) {
+      console.error(`Discovery fixture failed: ${fixture.fixture} -> ${fixture.detail}`);
+      process.exit(1);
+    }
+    console.log(`Discovery fixture passed: ${fixture.fixture} (${fixture.classification})`);
+  }
 
   console.log("Agent fixture checks passed.");
 }

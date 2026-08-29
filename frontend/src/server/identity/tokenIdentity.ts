@@ -122,7 +122,9 @@ export function resolveTokenIdentity(input: AgentInputIdentity): ResolvedTokenId
       ? `${chain}:${contractAddress}`
       : contractAddress
         ? contractAddress
-        : [symbol, tokenName, websiteUrl, input.coingeckoId].filter(Boolean).join(":").toLowerCase() || "unknown-token";
+        : input.assetKey && chain
+          ? `${chain}:${input.assetKey}`
+          : [symbol, tokenName, websiteUrl, input.coingeckoId].filter(Boolean).join(":").toLowerCase() || "unknown-token";
 
   return {
     ...input,

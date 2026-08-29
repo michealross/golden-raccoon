@@ -10,7 +10,9 @@ export type ApiCacheKey =
   | "history"
   | "scan"
   | "rules"
-  | "transactions";
+  | "transactions"
+  | "alerts"
+  | "alertRules";
 
 export type ApiCachePolicy = {
   name: string;
@@ -93,6 +95,22 @@ export const apiCacheStrategy: Record<ApiCacheKey, ApiCachePolicy> = {
     ttlClass: "none",
     criticalFreshnessVisible: false,
     detail: "User execution rules are wallet-specific and should be fetched fresh.",
+  },
+  alerts: {
+    name: "alerts-no-store",
+    seconds: 0,
+    scope: "no-store",
+    ttlClass: "none",
+    criticalFreshnessVisible: true,
+    detail: "Alert inboxes are wallet-specific and must never be shared-cached.",
+  },
+  alertRules: {
+    name: "alert-rules-no-store",
+    seconds: 0,
+    scope: "no-store",
+    ttlClass: "none",
+    criticalFreshnessVisible: true,
+    detail: "Alert rule definitions are wallet-specific and must never be shared-cached.",
   },
   transactions: {
     name: "transactions-no-store",

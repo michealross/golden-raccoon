@@ -12,6 +12,9 @@ export const rateLimitProfiles = {
   executionPrepare: { namespace: "execute:prepare", limit: 20, windowMs: 60_000 },
   historyRead: { namespace: "history", limit: 80, windowMs: 60_000 },
   expensiveProviderCall: { namespace: "provider:expensive", limit: 10, windowMs: 60_000 },
+  alertRead: { namespace: "alert:read", limit: 80, windowMs: 60_000 },
+  alertRuleWrite: { namespace: "alert:write", limit: 30, windowMs: 60_000 },
+  alertAcknowledge: { namespace: "alert:ack", limit: 30, windowMs: 60_000 },
 } satisfies Record<string, RateLimitOptions>;
 
 const buckets = globalThis as typeof globalThis & {

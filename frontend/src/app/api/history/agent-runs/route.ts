@@ -4,6 +4,7 @@ import type { AgentResult } from "@/server/types";
 import { withCacheHeaders } from "@/server/cache/strategy";
 import { checkRateLimit } from "@/server/security/rateLimit";
 import { createAgentRunRecord, listAgentRunRecords } from "@/server/storage";
+import { scheduleIngestion } from "@/server/observability/alertIngestion";
 
 const targetTokenSchema = z.object({
   symbol: z.string().optional(),
@@ -49,18 +50,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  return withCacheHeaders(
-    NextResponse.json(
-      createAgentRunRecord({
-        walletAddress: parsed.data.walletAddress,
-        mode: parsed.data.mode,
-        inputSnapshot: parsed.data.inputSnapshot,
-        targetToken: parsed.data.targetToken,
-        results: parsed.data.results as AgentResult[],
-        userAction: parsed.data.userAction,
-      }),
-      { status: 201 },
-    ),
-    "history",
-  );
+  const record = createAgentRunRecord({
+    walletAddress: parsed.data.walletAddress,
+    mode: parsed.data.mode,
+    inputSnapshot: parsed.data.inputSnapshot,
+    targetToken: parsed.data.targetToken,
+    results: parsed.data.results as AgentResult[],
+    userAction: parsed.data.userAction,
+  });
+  // Fire-and-forget alert ingestion: extract observations, persist them,
+  // then run the engine. The response is delivered without waiting for
+  // delivery work so alerting never blocks the user-facing request.
+  scheduleIngestion(record);
+
+  return withCacheHeaders(NextResponse.json(record, { status: 201 }), "history");
 }

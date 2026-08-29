@@ -2,7 +2,7 @@ import type { AgentFinding, AgentMissingData, AgentRecommendedAction, AgentResul
 import { buildAgentResult, clampScore, scoreToRiskLevel } from "@/server/agents/shared";
 import { validateAgentResult } from "@/server/agents/schema";
 
-type DecisionMode = "portfolio_review" | "token_scan" | "pre_buy_check" | "holding_review" | "execution_prepare";
+type DecisionMode = "portfolio_review" | "token_scan" | "pre_buy_check" | "holding_review" | "execution_prepare" | "discovery_candidate";
 
 type UserRiskProfile = {
   mode?: "conservative" | "balanced" | "aggressive" | "custom";
@@ -21,6 +21,13 @@ type DecisionContext = {
   walletAddress?: string;
   tokenSymbol?: string;
   establishedAsset?: boolean;
+  discoveryContext?: {
+    chainFamily?: string;
+    discoverySource?: string;
+    identityConfidence?: number;
+    identityConfidenceLabel?: "low" | "medium" | "high";
+    metrics?: Record<string, unknown>;
+  };
 };
 
 type ExecutionReadiness = {
@@ -597,13 +604,91 @@ function decideAction(input: {
 
   if (input.context.userAlreadyOwnsToken && input.context.holdingAllocationPercent >= 15 && input.score >= 40) {
     return "reduce_exposure";
-  }
-
-  if (input.score >= 75) return "avoid";
+  }    if (input.score >= 75) return "avoid";
   if (input.score >= 50) return input.context.userAlreadyOwnsToken ? "reduce_exposure" : "manual_review";
   if (input.score >= 25) return "watch";
 
   return input.context.userAlreadyOwnsToken && input.context.holdingAllocationPercent <= 20 ? "hold" : "watch";
+}
+
+export type DiscoveryClassification = "watch" | "risky" | "scam" | "early_opportunity";
+
+export type DiscoveryClassificationDecision = {
+  classification: DiscoveryClassification;
+  reasons: string[];
+};
+
+export function classifyDiscovery(input: {
+  action: AgentRecommendedAction;
+  score: number;
+  confidence: number;
+  results: AgentResult[];
+  context?: DecisionContext;
+  blockers: DecisionBlocker[];
+  coverageConnected: number;
+  coverageTotal: number;
+}): DiscoveryClassificationDecision {
+  const reasons: string[] = [];
+  const contextConfidence = input.context?.discoveryContext?.identityConfidence ?? 0;
+  const confidenceLabel = input.context?.discoveryContext?.identityConfidenceLabel ?? "low";
+  const hasCriticalBlocker = input.blockers.some((blocker) => blocker.severity === "critical");
+  const coverageRatio = input.coverageTotal > 0 ? input.coverageConnected / input.coverageTotal : 0;
+  const identityResolved = contextConfidence >= 0.42 && confidenceLabel !== "low";
+  const metrics = input.context?.discoveryContext?.metrics;
+  const criticallyThin = Boolean(
+    metrics &&
+      typeof metrics.liquidityUsd === "number" &&
+      metrics.liquidityUsd < 50_000 &&
+      typeof metrics.pairAgeDays === "number" &&
+      metrics.pairAgeDays < 7 &&
+      typeof metrics.fdvLiquidityRatio === "number" &&
+      metrics.fdvLiquidityRatio > 50,
+  );
+
+  if (hasCriticalBlocker) {
+    reasons.push("Critical blocker observed from a connected specialist agent.");
+    return { classification: "scam", reasons };
+  }
+
+  if (input.action === "avoid" || input.score >= 75) {
+    reasons.push("Decision Agent recommended avoid due to elevated risk score.");
+    return { classification: "risky", reasons };
+  }
+
+  if (!identityResolved) {
+    reasons.push(`Identity confidence is ${confidenceLabel} (${Math.round(contextConfidence * 100)}%) - below resolution threshold.`);
+  }
+
+  if (coverageRatio < 0.5 || input.coverageConnected === 0) {
+    reasons.push(`Source coverage is ${input.coverageConnected}/${input.coverageTotal}; not enough to upgrade classification.`);
+  }
+
+  if (input.confidence < 0.5) {
+    reasons.push(`Decision confidence ${Math.round(input.confidence * 100)}% is below the discovery opportunity threshold.`);
+  }
+
+  if (criticallyThin) {
+    reasons.push("Critically-thin liquidity with young pair age disqualifies from early opportunity.");
+  }
+
+  if (
+    !criticallyThin &&
+    identityResolved &&
+    coverageRatio >= 0.5 &&
+    input.confidence >= 0.5 &&
+    input.score < 50 &&
+    input.blockers.length === 0
+  ) {
+    reasons.push("Identity resolved, coverage adequate, no critical blockers, score below 50.");
+    return { classification: "early_opportunity", reasons };
+  }
+
+  if (input.score >= 50 || input.blockers.length > 0) {
+    reasons.push("Decision Agent flagged elevated risk or non-critical blockers.");
+    return { classification: "risky", reasons };
+  }
+
+  return { classification: "watch", reasons };
 }
 
 function verdictForAction(action: AgentRecommendedAction) {

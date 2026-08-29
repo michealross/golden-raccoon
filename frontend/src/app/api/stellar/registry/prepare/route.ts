@@ -8,7 +8,8 @@ import { checkRateLimit } from "@/server/security/rateLimit";
 const bodySchema = z.object({
   network: z.string(), publisher: z.string().refine(isStellarAccountAddress, "Expected Stellar G-address"),
   assetKey: z.string().min(1).max(180), assetLabel: z.string().min(1).max(180),
-  score: z.number().int().min(0).max(100), verdict: z.string().regex(/^[a-zA-Z0-9_]{1,32}$/),
+  score: z.number().int().min(0).max(100), confidenceBps: z.number().int().min(0).max(10000).default(5000),
+  verdict: z.string().regex(/^[a-zA-Z0-9_]{1,32}$/),
   evidenceUri: z.string().max(512).default(""), updatedAt: z.number().int().positive().optional(), report: z.unknown(),
 });
 

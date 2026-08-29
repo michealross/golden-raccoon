@@ -11,6 +11,7 @@ export type RiskRegistryPublication = {
   assetKey: string;
   assetLabel: string;
   score: number;
+  confidenceBps: number;
   verdict: string;
   evidenceUri: string;
   updatedAt: number;
@@ -85,6 +86,7 @@ export async function prepareRiskPublication(networkId: StellarNetworkId, public
     nativeToScVal(network.shortName, { type: "symbol" }),
     nativeToScVal(publication.assetLabel),
     nativeToScVal(publication.score, { type: "u32" }),
+    nativeToScVal(publication.confidenceBps, { type: "u32" }),
     nativeToScVal(publication.verdict.slice(0, 32), { type: "symbol" }),
     nativeToScVal(reportHash),
     nativeToScVal(publication.evidenceUri),

@@ -171,6 +171,24 @@ export function WalletPortfolioCard({
           <div className="mt-2 text-5xl font-semibold tracking-tight text-white">
             {formatUsd(portfolio.totalValueUsd, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
+          {portfolio.valuationStatus === "partial" ? (
+            <div className="mt-2 text-xs text-amber-200">
+              Partial valuation · {portfolio.unpricedAssetCount ?? 0} positive balance
+              {(portfolio.unpricedAssetCount ?? 0) === 1 ? "" : "s"} without a trusted price
+            </div>
+          ) : null}
+          {(portfolio.dataWarnings?.length ?? 0) > 0 ? (
+            <div className="mt-1 text-xs text-amber-200">
+              {portfolio.dataWarnings?.length} provider warning
+              {portfolio.dataWarnings?.length === 1 ? "" : "s"}
+            </div>
+          ) : null}
+          {typeof portfolio.spendableNativeBalance === "number" ? (
+            <div className="mt-1 text-xs text-white/42">
+              Spendable {portfolio.nativeSymbol}: {formatTokenBalance(portfolio.spendableNativeBalance)}
+              {" · "}minimum reserve {formatTokenBalance(portfolio.minimumReserveXlm ?? 0)}
+            </div>
+          ) : null}
         </div>
         <div className="text-right text-sm">
           <div className="rounded-full border border-white/10 bg-white/7 px-3 py-1 text-white/56">
@@ -233,13 +251,35 @@ export function WalletPortfolioCard({
                   <div className="mt-1 truncate text-sm text-white/48">
                     {formatTokenBalance(holding.balance)} {holding.symbol}
                   </div>
-                  {holding.chainName ? <div className="mt-1 text-xs text-white/32">{holding.chainName}</div> : null}
+                  {holding.chainName ? (
+                    <div className="mt-1 text-xs text-white/32">
+                      {holding.chainName}
+                      {holding.issuer
+                        ? ` · issuer ${shortAddress(holding.issuer)}`
+                        : holding.contractId
+                          ? ` · issuer unavailable · contract ${shortAddress(holding.contractId)}`
+                          : " · native issuer"}
+                    </div>
+                  ) : null}
                 </div>
               </div>
               <div className="shrink-0 text-right">
-                <div className="text-lg font-semibold">
-                  {formatUsd(holding.valueUsd, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </div>
+                {holding.priceStatus === "unavailable" ? (
+                  <div className="text-sm font-medium text-amber-200">Price unavailable</div>
+                ) : (
+                  <div className="text-lg font-semibold">
+                    {formatUsd(holding.valueUsd, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                )}
+                {holding.stellarRisk?.authorized === false ? (
+                  <div className="mt-1 text-xs text-red-300">Unauthorized trustline</div>
+                ) : null}
+                {holding.stellarRisk?.clawbackEnabled ? (
+                  <div className="mt-1 text-xs text-amber-200">Clawback enabled</div>
+                ) : null}
+                {holding.stellarRisk?.dataStatus === "partial" ? (
+                  <div className="mt-1 text-xs text-amber-200">Issuer risk data partial</div>
+                ) : null}
               </div>
             </div>
           );

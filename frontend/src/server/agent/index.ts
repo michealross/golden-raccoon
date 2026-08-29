@@ -1,7 +1,7 @@
 import type { AgentDecision, AgentStep, PortfolioSnapshot, TransactionPreview } from "../types";
 import { analyzePortfolio } from "./analyze";
 import { decideAction } from "./decide";
-import { observePortfolio } from "./observe";
+import { observePortfolio, observeDiscoveryCandidates } from "./observe";
 import { planTransaction } from "./plan";
 
 export type AgentAnalysisResult = {
@@ -12,6 +12,7 @@ export type AgentAnalysisResult = {
 
 export function runGoldRaccoonAgent(portfolio: PortfolioSnapshot): AgentAnalysisResult {
   const observeStep = observePortfolio(portfolio);
+  const discoveryStep = observeDiscoveryCandidates();
   const analyzeStep = analyzePortfolio(portfolio);
   const { step: decideStep, decision } = decideAction(portfolio);
   const { step: planStep, preview } = planTransaction(portfolio, decision);
@@ -19,6 +20,7 @@ export function runGoldRaccoonAgent(portfolio: PortfolioSnapshot): AgentAnalysis
   return {
     steps: [
       observeStep,
+      ...(discoveryStep ? [discoveryStep] : []),
       analyzeStep,
       decideStep,
       planStep,

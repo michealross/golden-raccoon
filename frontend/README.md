@@ -27,6 +27,10 @@ PORTFOLIO_CHAIN=
 
 # Server-only RPC/provider config.
 GOAT_RPC_URL=https://rpc.goat.network
+STELLAR_RPC_URL=https://soroban-testnet.stellar.org
+STELLAR_DATA_API_URL=https://horizon-testnet.stellar.org
+# Optional JSON array of explicitly supported SAC/SEP-41 contracts.
+STELLAR_PORTFOLIO_TOKENS_JSON=
 # Either provide a manually generated access token:
 GOPLUS_API_KEY=
 # Or provide app credentials; the server will request and cache access tokens:
@@ -42,6 +46,22 @@ X402_ASSET=USDC
 CDP_API_KEY_ID=
 CDP_API_KEY_SECRET=
 ```
+
+## Stellar portfolio
+
+The portfolio endpoint derives spendable XLM from the live base reserve,
+subentries, sponsorship counts, and selling liabilities. Classic trustlines
+retain issuer identity and authorization/clawback flags. XLM and official
+network USDC have trusted prices; every other positive balance remains
+explicitly unpriced unless it appears in the server-only
+`STELLAR_PORTFOLIO_TOKENS_JSON` registry.
+
+Configured SAC/SEP-41 entries are queried through their `balance` method and
+must include `network`, `kind`, `contractId`, `symbol`, `name`, and `decimals`.
+Optional trusted metadata includes `issuer`, `verified`, `priceUsd`, and
+`priceSource`. Never use `0` to represent an unknown price; omit `priceUsd`.
+Portfolio responses are cached for 30 seconds with a key containing both the
+canonical wallet and Stellar network.
 
 ## GOAT x402 Premium Flow
 

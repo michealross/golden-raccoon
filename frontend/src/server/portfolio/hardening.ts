@@ -27,7 +27,7 @@ export function getPortfolioEmptyState(portfolio: PortfolioSnapshot, sourceStatu
 }
 
 export function getPriceReliability(holding: TokenHolding) {
-  if (holding.priceUsd <= 0 || holding.valueUsd <= 0) {
+  if (holding.priceUsd === null || holding.priceUsd <= 0 || holding.valueUsd <= 0) {
     return {
       level: "no_price" as const,
       risk: 82,
